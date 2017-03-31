@@ -2,8 +2,8 @@ import "babel-polyfill";
 import axios from "axios";
 import moment from "moment";
 
-function createProduct(context, businessName, zuoraApiHost, zuoraHeaders, today, endDate) {
-    axios.post(`https://${zuoraApiHost}/v1/object/product`, {
+function createProduct(context, businessName, zuoraHost, zuoraHeaders, today, endDate) {
+    axios.post(`https://rest.${zuoraHost}/v1/object/product`, {
         Name: businessName,
         Description: "Product created through StartYourBusiness",
         EffectiveEndDate: endDate,
@@ -12,9 +12,9 @@ function createProduct(context, businessName, zuoraApiHost, zuoraHeaders, today,
         .then(({data}) => {
             if (data.Success) {
                 console.log("ZUORA OK");
-                createProductRatePlan(context, `${businessName}_1`, zuoraApiHost, zuoraHeaders, today, endDate, data.Id);
-                createProductRatePlan(context, `${businessName}_2`, zuoraApiHost, zuoraHeaders, today, endDate, data.Id);
-                createProductRatePlan(context, `${businessName}_3`, zuoraApiHost, zuoraHeaders, today, endDate, data.Id);
+                createProductRatePlan(context, `${businessName}_1`, zuoraHost, zuoraHeaders, today, endDate, data.Id);
+                createProductRatePlan(context, `${businessName}_2`, zuoraHost, zuoraHeaders, today, endDate, data.Id);
+                createProductRatePlan(context, `${businessName}_3`, zuoraHost, zuoraHeaders, today, endDate, data.Id);
             } else {
                 console.log("ZUORA ERROR");
                 console.log(data);
@@ -34,8 +34,8 @@ function createProduct(context, businessName, zuoraApiHost, zuoraHeaders, today,
         });
 }
 
-function createProductRatePlan(context, ratePlanName, zuoraApiHost, zuoraHeaders, today, endDate, productId) {
-    axios.post(`https://${zuoraApiHost}/v1/object/product-rate-plan`, {
+function createProductRatePlan(context, ratePlanName, zuoraHost, zuoraHeaders, today, endDate, productId) {
+    axios.post(`https://rest.${zuoraHost}/v1/object/product-rate-plan`, {
         Name: ratePlanName,
         Description: "Product rate plan created through StartYourBusiness",
         EffectiveEndDate: endDate,
@@ -68,7 +68,7 @@ exports.handler = function(event, context) {
     console.log("Received event:", JSON.stringify(event, null, 2));
     console.log("Received context:", JSON.stringify(context, null, 2));
 
-    const {zuoraApiHost} = event["stage-variables"];
+    const {zuoraHost} = event["stage-variables"];
     const zuoraHeaders = {
         headers: {
             ...event["stage-variables"],
@@ -81,6 +81,6 @@ exports.handler = function(event, context) {
     const {businessName, productId, productPlans} = event["body-json"];
 
     if (!productId) {
-        createProduct(context, businessName, zuoraApiHost, zuoraHeaders, today, endDate, productPlans);
+        createProduct(context, businessName, zuoraHost, zuoraHeaders, today, endDate, productPlans);
     }
 };
