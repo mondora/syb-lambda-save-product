@@ -9,9 +9,10 @@
   },
   "dependencies": {
     "aws-sdk": "^2.5.6",
+    "axios": "^0.15.3",
     "babel-polyfill": "^6.9.1",
     "dotenv": "^2.0.0",
-    "nuora": "^1.0.41"
+    "moment": "^2.18.1"
   },
   "devDependencies": {
     "babel": "^6.5.2",
