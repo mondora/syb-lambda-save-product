@@ -2,7 +2,7 @@ import "babel-polyfill";
 import axios from "axios";
 import moment from "moment";
 
-function createProduct(context, businessName, zuoraHost, zuoraHeaders, today, endDate) {
+function createProduct(context, businessName, zuoraHost, zuoraHeaders, today, endDate, productPlans) {
     axios.post(`https://rest.${zuoraHost}/v1/object/product`, {
         Name: businessName,
         Description: "Product created through StartYourBusiness",
@@ -12,9 +12,9 @@ function createProduct(context, businessName, zuoraHost, zuoraHeaders, today, en
         .then(({data}) => {
             if (data.Success) {
                 console.log("ZUORA OK");
-                createProductRatePlan(context, `${businessName}_1`, zuoraHost, zuoraHeaders, today, endDate, data.Id);
-                createProductRatePlan(context, `${businessName}_2`, zuoraHost, zuoraHeaders, today, endDate, data.Id);
-                createProductRatePlan(context, `${businessName}_3`, zuoraHost, zuoraHeaders, today, endDate, data.Id);
+                productPlans.forEach((plan, index) => {
+                    createProductRatePlan(context, `${businessName}_${index + 1}`, zuoraHost, zuoraHeaders, today, endDate, data.Id, plan);
+                });
             } else {
                 console.log("ZUORA ERROR");
                 console.log(data);
@@ -34,10 +34,11 @@ function createProduct(context, businessName, zuoraHost, zuoraHeaders, today, en
         });
 }
 
-function createProductRatePlan(context, ratePlanName, zuoraHost, zuoraHeaders, today, endDate, productId) {
+function createProductRatePlan(context, ratePlanName, zuoraHost, zuoraHeaders, today, endDate, productId, productPlan) {
+    //TODO save features
     axios.post(`https://rest.${zuoraHost}/v1/object/product-rate-plan`, {
         Name: ratePlanName,
-        Description: "Product rate plan created through StartYourBusiness",
+        Description: productPlan.description,
         EffectiveEndDate: endDate,
         EffectiveStartDate: today,
         ProductId: productId
@@ -45,6 +46,8 @@ function createProductRatePlan(context, ratePlanName, zuoraHost, zuoraHeaders, t
         .then(({data}) => {
             if (data.Success) {
                 console.log("ZUORA OK");
+                productPlan.id = data.Id;
+                createProductRatePlanCharge(context, zuoraHost, zuoraHeaders, productPlan);
             } else {
                 console.log("ZUORA ERROR");
                 console.log(data);
@@ -53,6 +56,51 @@ function createProductRatePlan(context, ratePlanName, zuoraHost, zuoraHeaders, t
                     ...data
                 }));
             }
+        })
+        .catch(error => {
+            console.log("ZUORA ERROR");
+            console.log(error);
+            context.fail(JSON.stringify({
+                code: "ZuoraError",
+                ...error
+            }));
+        });
+}
+
+function createProductRatePlanCharge(context, zuoraHost, zuoraHeaders, productPlan) {
+    axios.post(`https://rest.${zuoraHost}/v1/action/create`, {
+        type: "ProductRatePlanCharge",
+        objects: [{
+            BillCycleType: "DefaultFromCustomer",
+            BillingPeriod: productPlan.frequency,
+            ChargeModel: "Flat Fee Pricing",
+            ChargeType: "Recurring",
+            Name: "Basic",
+            ProductRatePlanId: productPlan.id,
+            TriggerEvent: "ContractEffective",
+            UseDiscountSpecificAccountingCode: false,
+            ProductRatePlanChargeTierData: {
+                ProductRatePlanChargeTier: [{
+                    Active: true,
+                    Currency: "EUR",
+                    Price: productPlan.price
+                }]
+            }
+        }]
+    }, zuoraHeaders)
+        .then(({data}) => {
+            data.forEach(objData => {
+                if (objData.Success) {
+                    console.log("ZUORA OK");
+                } else {
+                    console.log("ZUORA ERROR");
+                    console.log(objData);
+                    context.fail(JSON.stringify({
+                        code: "ZuoraError",
+                        ...objData
+                    }));
+                }
+            })
         })
         .catch(error => {
             console.log("ZUORA ERROR");
