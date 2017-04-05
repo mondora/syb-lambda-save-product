@@ -2,6 +2,13 @@ import "babel-polyfill";
 import axios from "axios";
 import moment from "moment";
 
+//Need this because values of ProductRatePlan (key) are different from ProductRatePlanCharge (value)
+const frequencyMapper = {
+    "Monthly": "Month",
+    "Annual": "Annual",
+    "Quarterly": "Quarter"
+};
+
 function createProduct(context, businessName, zuoraHost, zuoraHeaders, today, endDate, productPlans) {
     axios.post(`https://rest.${zuoraHost}/v1/object/product`, {
         Name: businessName,
@@ -35,27 +42,38 @@ function createProduct(context, businessName, zuoraHost, zuoraHeaders, today, en
 }
 
 function createProductRatePlan(context, ratePlanName, zuoraHost, zuoraHeaders, today, endDate, productId, productPlan) {
-    //TODO save features
-    axios.post(`https://rest.${zuoraHost}/v1/object/product-rate-plan`, {
+    let planObj = {
         Name: ratePlanName,
         Description: productPlan.description,
         EffectiveEndDate: endDate,
         EffectiveStartDate: today,
-        ProductId: productId
+        ProductId: productId,
+        Frequency__c: productPlan.frequency
+    };
+    if (productPlan.features && Array.isArray(productPlan.features)) {
+        for(let i = 0; i < productPlan.features.length && i < 4; i++) {
+            planObj[`feature${i+1}__c`] = productPlan.features[i];
+        }
+    }
+    axios.post(`https://rest.${zuoraHost}/v1/action/create`, {
+        type: "ProductRatePlan",
+        objects: [planObj]
     }, zuoraHeaders)
         .then(({data}) => {
-            if (data.Success) {
-                console.log("ZUORA OK");
-                productPlan.id = data.Id;
-                createProductRatePlanCharge(context, zuoraHost, zuoraHeaders, productPlan);
-            } else {
-                console.log("ZUORA ERROR");
-                console.log(data);
-                context.fail(JSON.stringify({
-                    code: "ZuoraError",
-                    ...data
-                }));
-            }
+            data.forEach(objData => {
+                if (objData.Success) {
+                    console.log("ZUORA OK");
+                    productPlan.id = objData.Id;
+                    createProductRatePlanCharge(context, zuoraHost, zuoraHeaders, productPlan);
+                } else {
+                    console.log("ZUORA ERROR");
+                    console.log(objData);
+                    context.fail(JSON.stringify({
+                        code: "ZuoraError",
+                        ...objData
+                    }));
+                }
+            })
         })
         .catch(error => {
             console.log("ZUORA ERROR");
@@ -72,7 +90,7 @@ function createProductRatePlanCharge(context, zuoraHost, zuoraHeaders, productPl
         type: "ProductRatePlanCharge",
         objects: [{
             BillCycleType: "DefaultFromCustomer",
-            BillingPeriod: productPlan.frequency,
+            BillingPeriod: frequencyMapper[productPlan.frequency],
             ChargeModel: "Flat Fee Pricing",
             ChargeType: "Recurring",
             Name: "Basic",
