@@ -9,52 +9,52 @@ const frequencyMapper = {
     "Quarterly": "Quarter"
 };
 
-function createProduct(context, businessName, zuoraHost, zuoraHeaders, today, endDate, productPlans) {
+function returnZuoraError(context, object) {
+    console.log("ZUORA ERROR");
+    console.log(object);
+    context.fail(JSON.stringify({
+        code: "ZuoraError",
+        ...object
+    }));
+}
+
+function createProduct(context, businessName, zuoraHost, zuoraHeaders, startDate, endDate, productPlans) {
     axios.post(`https://rest.${zuoraHost}/v1/object/product`, {
         Name: businessName,
         Description: "Product created through StartYourBusiness",
         EffectiveEndDate: endDate,
-        EffectiveStartDate: today
+        EffectiveStartDate: startDate
     }, zuoraHeaders)
         .then(({data}) => {
             if (data.Success) {
                 console.log("ZUORA OK");
-                productPlans.forEach((plan, index) => {
-                    createProductRatePlan(context, `${businessName}_${index + 1}`, zuoraHost, zuoraHeaders, today, endDate, data.Id, plan);
-                });
+                productPlans.forEach((plan, index) => createProductRatePlan(
+                    context,
+                    `${businessName}_${index + 1}`,
+                    zuoraHost,
+                    zuoraHeaders,
+                    startDate,
+                    endDate,
+                    data.Id,
+                    plan
+                ));
             } else {
-                console.log("ZUORA ERROR");
-                console.log(data);
-                context.fail(JSON.stringify({
-                    code: "ZuoraError",
-                    ...data
-                }));
+                returnZuoraError(context, data);
             }
         })
-        .catch(error => {
-            console.log("ZUORA ERROR");
-            console.log(error);
-            context.fail(JSON.stringify({
-                code: "ZuoraError",
-                ...error
-            }));
-        });
+        .catch(error => returnZuoraError(context, error));
 }
 
-function createProductRatePlan(context, ratePlanName, zuoraHost, zuoraHeaders, today, endDate, productId, productPlan) {
+function createProductRatePlan(context, ratePlanName, zuoraHost, zuoraHeaders, startDate, endDate, productId, productPlan) {
     let planObj = {
         Name: ratePlanName,
         Description: productPlan.description,
         EffectiveEndDate: endDate,
-        EffectiveStartDate: today,
+        EffectiveStartDate: startDate,
         ProductId: productId,
         Frequency__c: productPlan.frequency
     };
-    if (productPlan.features && Array.isArray(productPlan.features)) {
-        for(let i = 0; i < productPlan.features.length && i < 4; i++) {
-            planObj[`feature${i+1}__c`] = productPlan.features[i];
-        }
-    }
+    populatePlanFeatures(productPlan, planObj);
     axios.post(`https://rest.${zuoraHost}/v1/action/create`, {
         type: "ProductRatePlan",
         objects: [planObj]
@@ -66,23 +66,43 @@ function createProductRatePlan(context, ratePlanName, zuoraHost, zuoraHeaders, t
                     productPlan.id = objData.Id;
                     createProductRatePlanCharge(context, zuoraHost, zuoraHeaders, productPlan);
                 } else {
-                    console.log("ZUORA ERROR");
-                    console.log(objData);
-                    context.fail(JSON.stringify({
-                        code: "ZuoraError",
-                        ...objData
-                    }));
+                    returnZuoraError(context, objData);
                 }
-            })
+            });
         })
-        .catch(error => {
-            console.log("ZUORA ERROR");
-            console.log(error);
-            context.fail(JSON.stringify({
-                code: "ZuoraError",
-                ...error
-            }));
-        });
+        .catch(error => returnZuoraError(context, error));
+}
+
+function updateProductRatePlan(context, zuoraHost, zuoraHeaders, productPlan) {
+    let planObj = {
+        Id: productPlan.productPlanId,
+        Description: productPlan.description,
+        Frequency__c: productPlan.frequency
+    };
+    populatePlanFeatures(productPlan, planObj);
+    axios.post(`https://rest.${zuoraHost}/v1/action/update`, {
+        type: "ProductRatePlan",
+        objects: [planObj]
+    }, zuoraHeaders)
+        .then(({data}) => {
+            data.forEach(objData => {
+                if (objData.Success) {
+                    console.log("ZUORA OK");
+                    updateProductRatePlanCharge(context, zuoraHost, zuoraHeaders, productPlan);
+                } else {
+                    returnZuoraError(context, objData);
+                }
+            });
+        })
+        .catch(error => returnZuoraError(context, error));
+}
+
+function populatePlanFeatures(productPlan, planObj) {
+    if (productPlan.features && Array.isArray(productPlan.features)) {
+        for (let i = 0; i < productPlan.features.length && i < 4; i++) {
+            planObj[`feature${i+1}__c`] = productPlan.features[i];
+        }
+    }
 }
 
 function createProductRatePlanCharge(context, zuoraHost, zuoraHeaders, productPlan) {
@@ -111,23 +131,52 @@ function createProductRatePlanCharge(context, zuoraHost, zuoraHeaders, productPl
                 if (objData.Success) {
                     console.log("ZUORA OK");
                 } else {
-                    console.log("ZUORA ERROR");
-                    console.log(objData);
-                    context.fail(JSON.stringify({
-                        code: "ZuoraError",
-                        ...objData
-                    }));
+                    returnZuoraError(context, objData);
                 }
-            })
+            });
         })
-        .catch(error => {
-            console.log("ZUORA ERROR");
-            console.log(error);
-            context.fail(JSON.stringify({
-                code: "ZuoraError",
-                ...error
-            }));
-        });
+        .catch(error => returnZuoraError(context, error));
+}
+
+function updateProductRatePlanCharge(context, zuoraHost, zuoraHeaders, productPlan) {
+    axios.post(`https://rest.${zuoraHost}/v1/action/update`, {
+        type: "ProductRatePlanCharge",
+        objects: [{
+            BillingPeriod: frequencyMapper[productPlan.frequency],
+            Id: productPlan.productRatePlanChargeId
+        }]
+    }, zuoraHeaders)
+        .then(({data}) => {
+            data.forEach(objData => {
+                if (objData.Success) {
+                    console.log("ZUORA OK");
+                    updateRatePlanChargeTier(context, zuoraHost, zuoraHeaders, productPlan);
+                } else {
+                    returnZuoraError(context, objData);
+                }
+            });
+        })
+        .catch(error => returnZuoraError(context, error));
+}
+
+function updateRatePlanChargeTier(context, zuoraHost, zuoraHeaders, productPlan) {
+    axios.post(`https://rest.${zuoraHost}/v1/action/update`, {
+        type: "RatePlanChargeTier",
+        objects: [{
+            Price: productPlan.price,
+            Id: productPlan.productRatePlanChargeTierId
+        }]
+    }, zuoraHeaders)
+        .then(({data}) => {
+            data.forEach(objData => {
+                if (objData.Success) {
+                    console.log("ZUORA OK");
+                } else {
+                    returnZuoraError(context, objData);
+                }
+            });
+        })
+        .catch(error => returnZuoraError(context, error));
 }
 
 exports.handler = function(event, context) {
@@ -141,12 +190,16 @@ exports.handler = function(event, context) {
             "Content-Type": "application/json"
         }
     };
-    const today = moment().format("YYYY-MM-DD");
-    const endDate = moment().add(10, "years").format("YYYY-MM-DD");
+    //If starting in the same day Zuora will put plan active on the day after
+    const startDate = moment().subtract(1, "days").format("YYYY-MM-DD");
+    //TODO think about it
+    const endDate = moment().add(20, "years").format("YYYY-MM-DD");
 
-    const {businessName, productId, productPlans} = event["body-json"];
+    const {businessName, update, productPlans} = event["body-json"];
 
-    if (!productId) {
-        createProduct(context, businessName, zuoraHost, zuoraHeaders, today, endDate, productPlans);
+    if (update) {
+        productPlans.forEach(plan => updateProductRatePlan(context, zuoraHost, zuoraHeaders, plan));
+    } else {
+        createProduct(context, businessName, zuoraHost, zuoraHeaders, startDate, endDate, productPlans);
     }
 };
